@@ -12,5 +12,5 @@ program
     {
       throw Error('loss config file')
     }
-    require('../index')(cfg);
+    require('../src/index')(cfg);
   })

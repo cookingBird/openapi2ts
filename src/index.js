@@ -243,8 +243,7 @@ function codeGen({ paths, components, definitions }) {
 
     if (!tsFile)
     {
-      const headerTpl = `${ axiosRequest }
-			`;
+      const headerTpl = `${ axiosRequest }`;
       tsFile = project.createSourceFile(filePath, headerTpl, {
         overwrite: true,
       });
