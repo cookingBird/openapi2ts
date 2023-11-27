@@ -1,0 +1,22 @@
+{
+  "name": "openapi2ts",
+  "version": "1.0.0",
+  "description": "openapi json 2 ts file",
+  "main": "index.js",
+  "bin": {
+    "api2ts": "./bin/cli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ts",
+    "openapi"
+  ],
+  "dependencies": {
+    "ts-morph": "^20.0.0",
+    "axios": "1.6.2"
+  },
+  "author": "cooking_bird",
+  "license": "ISC"
+}
