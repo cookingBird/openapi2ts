@@ -2,16 +2,17 @@
 const axios = require("axios").default;
 const path = require("path");
 const { Project } = require("ts-morph");
+const defaultConfig = require("./default");
+const merge = require("./tools/merge");
 
 
-let outPutDir = "src/openapi2ts";
-
-let docType = 'openapi-v2';
-
-
-//全局导入
-let axiosRequest = "import request from '@/utils/request'\n";
-
+let outPutDir,
+  docType,
+  axiosRequest,
+  omitGeneratorPath, //排除自动生成的接口
+  omitModules, //排除模块
+  globalOmit, //排除ts内置类型
+  globalTypeConvert // 类型转换
 let returnConfig = {
   isResult: false
 };
@@ -20,24 +21,6 @@ let afterRequestBuilt = function afterRequestBuilt(req) {
   req.url = req.url.replace(/^\/oneMap/, '')
   return req
 }
-
-//排除自动生成的接口
-let omitGeneratorPath = [];
-// 排除模块
-let omitModules = [];
-// 包含模块
-let includeModules = [];
-
-// 排除ts内置类型
-const globalOmit = {
-  Array: true,
-  Record: true,
-};
-//类型转换
-const globalTypeConvert = {
-  long: "string",
-  integer: "number",
-};
 
 let funcNameGenerateStrategy = (namePath) => {
   return namePath;
@@ -51,10 +34,11 @@ module.exports = (cfg) => {
     requestPath,
     apiVersion,
     output,
-    excludeApi,
-    includeModule,
+    exclude,
     excludeModule,
-    globalFileHeader } = cfg;
+    globalFileHeader,
+    omitTypes,
+    convertTypes } = merge(defaultConfig, cfg);
   if (apiVersion === 2)
   {
     docType = 'openapi-v2'
@@ -63,26 +47,31 @@ module.exports = (cfg) => {
   {
     docType = 'openapi-v3'
   }
-  outPutDir = output ?? outPutDir;
-
-  if (excludeApi && !Array.isArray(excludeApi)) throw Error('excludeApi type is array');
-  omitGeneratorPath = excludeApi;
-  if (excludeModule && !Array.isArray(excludeModule)) throw Error('excludeModule type is array');
+  outPutDir = output;
+  omitGeneratorPath = exclude;
   omitModules = excludeModule;
-  if (includeModule && !Array.isArray(includeModule)) throw Error('includeModule type is array');
-  includeModules = includeModule;
-
   axiosRequest = globalFileHeader;
+  globalOmit = omitTypes;
+  globalTypeConvert = convertTypes
   getResponse(requestPath).then((res) => {
     if (res.status === 200)
     {
-      codeGen(res.data);
+      const { data } = res;
+      let schemas;
+      if (docType === 'openapi-v2')
+      {
+        schemas = data.definitions;
+      }
+      else if (docType === 'openapi-v3')
+      {
+        schemas = data.components.schemas;
+      }
+      codeGen(data.path, schemas);
     }
   })
 };
 
 /**
- * @template R
  * @param { string } requestBody
  * @returns { Promise<import("axios").AxiosResponse<R>>}
  */
@@ -94,16 +83,7 @@ const genericTypePattern = /«(.+)»/;
 const pathVarPattern = /{(.*?)}/g;
 
 const project = new Project();
-function codeGen({ paths, components, definitions }) {
-  let schemas;
-  if (docType === 'openapi-v2')
-  {
-    schemas = definitions;
-  }
-  else if (docType === 'openapi-v3')
-  {
-    schemas = components.schemas;
-  }
+function codeGen(path, schemas) {
   const schemeDeclareStructureGetter = createSchemaGetter(schemas);
 
   // create schema file
@@ -213,15 +193,9 @@ function codeGen({ paths, components, definitions }) {
       });
 
   requests.forEach((req) => {
-    const {
-      tags,
-      url,
-    } = req;
+    const { tags, url } = req;
     if (omitGeneratorPath.includes(url)) return;
-    if (tags[0]?.length > 0 &&
-      (omitModules.length > 0 && omitModules.includes(tags[0]))
-      || (includeModules.length > 0 && !includeModules.includes(tags[0]))
-    ) return;
+    if (tags[0]?.length > 0 && omitModules.includes(tags[0])) return;
     const {
       methods,
       ContentType,
@@ -439,7 +413,7 @@ function codeGen({ paths, components, definitions }) {
         isTypeOnly: true,
         namedImports: candidates.reduce(
           (pre, cur) =>
-            pre.find((i) => i.name === cur.name) || globalOmit[cur.name]
+            pre.find((i) => i.name === cur.name) || globalOmit.includes(cur.name)
               ? pre
               : pre.concat(cur),
           []
